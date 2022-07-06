@@ -1,36 +1,31 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
-class MMD_loss(nn.Module):
-	def __init__(self, kernel_mul = 2.0, kernel_num = 5):
-		super(MMD_loss, self).__init__()
-		self.kernel_num = kernel_num
-		self.kernel_mul = kernel_mul
-		self.fix_sigma = None
-		return
-	def guassian_kernel(self, source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
-		n_samples = int(source.size()[0])+int(target.size()[0])
-    	total = torch.cat([source, target], dim=0)
+class MMDLoss(nn.Module):
 
-    	total0 = total.unsqueeze(0).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
-    	total1 = total.unsqueeze(1).expand(int(total.size(0)), int(total.size(0)), int(total.size(1)))
-    	L2_distance = ((total0-total1)**2).sum(2) 
-    	if fix_sigma:
-    		bandwidth = fix_sigma
-    	else:
-    		bandwidth = torch.sum(L2_distance.data) / (n_samples**2-n_samples)
-    	bandwidth /= kernel_mul ** (kernel_num // 2)
-    	bandwidth_list = [bandwidth * (kernel_mul**i) for i in range(kernel_num)]
-    	kernel_val = [torch.exp(-L2_distance / bandwidth_temp) for bandwidth_temp in bandwidth_list]
-    	return sum(kernel_val)
+    def __init__(self, kernel_mul=2.0, kernel_num=5, bandwidth=None):
+        super().__init__()
+        self.kernel_num = kernel_num
+        self.kernel_mul = kernel_mul
+        self.bandwidth = bandwidth
 
-    def forward(self, source, target):
-    	batch_size = int(source.size()[0])
-    	kernels = guassian_kernel(source, target, kernel_mul=self.kernel_mul, kernel_num=self.kernel_num, fix_sigma=self.fix_sigma)
-    	XX = kernels[:batch_size, :batch_size]
-    	YY = kernels[batch_size:, batch_size:]
-    	XY = kernels[:batch_size, batch_size:]
-    	YX = kernels[batch_size:, :batch_size]
-    	loss = torch.mean(XX + YY - XY -YX)
-    	return loss
+    def gaussian_kernel(self, X, Y):
+        total = torch.vstack([X, Y])
+        L2_distances = torch.cdist(total, total) ** 2
+
+        n_samples = X.shape[0] + Y.shape[0]
+        bandwidth = self.bandwidth if self.bandwidth is not None else torch.sum(L2_distances.data) / (n_samples ** 2 - n_samples)
+        bandwidth /= self.kernel_mul ** (self.kernel_num // 2)
+        bandwidth_list = bandwidth * self.kernel_mul ** torch.arange(self.kernel_num)
+
+        return torch.exp(-L2_distances[None, ...] / bandwidth_list[:, None, None]).sum(dim=0)
+
+    def forward(self, X, Y):
+        kernels = self.gaussian_kernel(X, Y)
+
+        X_size = X.shape[0]
+        XX = kernels[:X_size, :X_size]
+        YY = kernels[X_size:, X_size:]
+        XY = kernels[:X_size, X_size:]
+        return torch.mean(XX - XY - XY.T + YY)
