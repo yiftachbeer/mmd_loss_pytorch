@@ -11,11 +11,11 @@ class MMDLoss(nn.Module):
         self.bandwidth = bandwidth
 
     def gaussian_kernel(self, X, Y):
-        total = torch.vstack([X, Y])
-        L2_distances = torch.cdist(total, total) ** 2
+        combined = torch.vstack([X, Y])
+        L2_distances = torch.cdist(combined, combined) ** 2
 
-        n_samples = X.shape[0] + Y.shape[0]
-        bandwidth = self.bandwidth if self.bandwidth is not None else torch.sum(L2_distances.data) / (n_samples ** 2 - n_samples)
+        n_samples = len(combined)
+        bandwidth = L2_distances.data.sum() / (n_samples ** 2 - n_samples) if self.bandwidth is None else self.bandwidth
         bandwidth /= self.kernel_mul ** (self.kernel_num // 2)
         bandwidth_list = bandwidth * self.kernel_mul ** torch.arange(self.kernel_num)
 
