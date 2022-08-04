@@ -10,11 +10,10 @@ class RBF(nn.Module):
         self.kernel_mul = kernel_mul
         self.bandwidth = bandwidth
 
-    def forward(self, X, Y):
-        combined = torch.vstack([X, Y])
-        L2_distances = torch.cdist(combined, combined) ** 2
+    def forward(self, X):
+        L2_distances = torch.cdist(X, X) ** 2
 
-        n_samples = len(combined)
+        n_samples = len(X)
         bandwidth = L2_distances.data.sum() / (n_samples ** 2 - n_samples) if self.bandwidth is None else self.bandwidth
         bandwidth /= self.kernel_mul ** (self.kernel_num // 2)
         bandwidth_list = bandwidth * self.kernel_mul ** torch.arange(self.kernel_num)
@@ -29,7 +28,7 @@ class MMDLoss(nn.Module):
         self.kernel = kernel
 
     def forward(self, X, Y):
-        K = self.kernel(X, Y)
+        K = self.kernel(torch.vstack([X, Y]))
 
         X_size = X.shape[0]
         XX = K[:X_size, :X_size].mean()
