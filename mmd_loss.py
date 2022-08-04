@@ -4,21 +4,21 @@ from torch import nn
 
 class RBF(nn.Module):
 
-    def __init__(self, kernel_mul=2.0, kernel_num=5, bandwidth=None):
+    def __init__(self, n_kernels=5, mul_factor=2.0, bandwidth=None):
         super().__init__()
-        self.kernel_num = kernel_num
-        self.kernel_mul = kernel_mul
+        self.bandwidth_multipliers = mul_factor ** (torch.arange(n_kernels) - n_kernels // 2)
         self.bandwidth = bandwidth
+
+    def get_bandwidth(self, L2_distances):
+        if self.bandwidth is None:
+            n_samples = L2_distances.shape[0]
+            return L2_distances.data.sum() / (n_samples ** 2 - n_samples)
+
+        return self.bandwidth
 
     def forward(self, X):
         L2_distances = torch.cdist(X, X) ** 2
-
-        n_samples = len(X)
-        bandwidth = L2_distances.data.sum() / (n_samples ** 2 - n_samples) if self.bandwidth is None else self.bandwidth
-        bandwidth /= self.kernel_mul ** (self.kernel_num // 2)
-        bandwidth_list = bandwidth * self.kernel_mul ** torch.arange(self.kernel_num)
-
-        return torch.exp(-L2_distances[None, ...] / bandwidth_list[:, None, None]).sum(dim=0)
+        return torch.exp(-L2_distances[None, ...] / (self.get_bandwidth(L2_distances) * self.bandwidth_multipliers)[:, None, None]).sum(dim=0)
 
 
 class MMDLoss(nn.Module):
